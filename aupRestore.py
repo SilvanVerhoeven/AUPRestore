@@ -4,6 +4,7 @@ import argparse
 import xml.etree.ElementTree as ET
 import os
 import re
+import shutil
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -27,9 +28,17 @@ def project_file_path(file_path):
         )
     return os.path.abspath(file_path)
 
+def project_path(project_file_path):
+    return os.path.dirname(project_file_path)
+
 def data_file_path(file_path_from_args, project_file_path):
     data_file_path = project_file_path if file_path_from_args is None else file_path_from_args
-    return os.path.dirname(os.path.abspath(data_file_path))
+    data_file_path = os.path.abspath(data_file_path)
+    if not os.path.exists(data_file_path):
+        raise ValueError("Path do data files does not exist: {}".format(
+            data_file_path
+        ))
+    return data_file_path
 
 def get_namespace(tag):
         return re.search('{.*}', tag)[0]
@@ -46,11 +55,27 @@ def get_data_dir(root):
 
 def get_data_files(root):
     namespace = get_namespace(root.tag)
-    return [simpleblockfile.get('filename') for simpleblockfile in root.iter('{}simpleblockfile'.format(namespace))]
+    return set([simpleblockfile.get('filename') for simpleblockfile in root.iter('{}simpleblockfile'.format(namespace))])
+
+def restructure_data(filenames, input_path, output_path, copy=False):
+    for filename in filenames:
+        file_path = os.path.join(input_path, filename)
+        file_output_path = os.path.join(
+            output_path,
+            "e{}".format(filename[1:3]),
+            "d{}".format(filename[3:5])
+        )
+        if not os.path.exists(file_output_path):
+            os.makedirs(file_output_path)
+        if copy:
+            shutil.copy(file_path, file_output_path)
+        else:
+            shutil.move(file_path, file_output_path)
 
 args = parse_arguments()
 
-project_path = project_file_path(args.aup_file)
+project_file_path = project_file_path(args.aup_file)
+project_path = project_path(project_file_path)
 data_path = data_file_path(args.data, project_path)
 output_path = project_path if args.output is None else os.path.abspath(args.output)
 
@@ -60,4 +85,4 @@ project_root = project_tree.getroot()
 output_data_path = os.path.join(output_path, get_data_dir(project_root))
 
 data_files = get_data_files(project_root)
-print(data_files)
+restructure_data(data_files, data_path, output_data_path, args.copy)
